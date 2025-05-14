@@ -2,7 +2,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 require("dotenv").config();
-
+const morgan = require("morgan");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/authRoutes");
 const contactRoutes=require("./routes/contactRoutes")
@@ -11,6 +11,7 @@ const resaleBookRoutes = require("./routes/resaleBookRoutes");
 const rentalBooksRoutes=require("./routes/rentalRoutes")
 const buyRequestRoutes=require("./routes/buyRequestRoutes")
 const app = express();
+app.use(morgan("dev"));
 
 app.use(cors());
 app.use(bodyParser.json());
