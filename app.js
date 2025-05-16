@@ -19,11 +19,9 @@ app.use(bodyParser.urlencoded({ extended: true }));
 var corsOptions = {
   origin: [
     "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "http://192.168.255.113",
-    "http://192.168.255.43",
+    
   ],
-  // origin: '*',
+
 
   methods: "GET,POST,PUT,PATCH,DELETE,HEAD",
   credentials: true,
