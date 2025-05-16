@@ -10,8 +10,8 @@ const {
   getUserDetails,
   updateUserDetails,
   getAllUsers,
-  getUserById
-} = require("../Controllers/userController"); // ✅ Correct Import
+  getUserById,
+} = require("../Controllers/userController");
 const authMiddleware = require("../middlewares/authMiddleware");
 
 const router = express.Router();
@@ -21,7 +21,7 @@ router.post("/login", validateLogin, authController.login);
 router.get("/userDetails", authMiddleware, getUserDetails);
 router.get("/userDetails/:id", authMiddleware, getUserDetails);
 router.get("/getAllusers", getAllUsers);
-router.get("/getAllusers/:id",getUserById);
+router.get("/getAllusers/:id", getUserById);
 router.patch(
   "/updateUser",
   authMiddleware,

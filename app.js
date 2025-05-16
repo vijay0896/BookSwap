@@ -5,7 +5,7 @@ require("dotenv").config();
 const morgan = require("morgan");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/authRoutes");
-const contactRoutes=require("./routes/contactRoutes")
+
 const bookRoutes = require("./routes/bookRoutes");
 const resaleBookRoutes = require("./routes/resaleBookRoutes");
 const rentalBooksRoutes=require("./routes/rentalRoutes")
@@ -32,7 +32,6 @@ var corsOptions = {
 app.use(cors(corsOptions));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
-app.use("/api/contacts", contactRoutes);
 app.use("/api/books", bookRoutes); 
 app.use("/api/resale-books", resaleBookRoutes);
 

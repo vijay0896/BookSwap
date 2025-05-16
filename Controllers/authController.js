@@ -1,60 +1,77 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const User = require("../models/userModel");
+const UserModel = require("../models/userModel");
 
-exports.signup = (req, res) => {
-  const { name, email, password } = req.body;
+const signup = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
 
-  User.findByEmail(email, async (err, result) => {
-    if (result.length > 0) {
-      // console.log(`[SIGNUP] Email already exists: ${email}`);
-      return res.status(400).json({ message: "Email already exists!" });
+    if (!name || !email || !password) {
+      return res
+        .status(400)
+        .json({ success: false, message: "All fields are required" });
+    }
+
+    const existingUsers = await UserModel.findByEmail(email);
+    if (existingUsers.length > 0) {
+      return res
+        .status(409)
+        .json({ success: false, message: "User already exists" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    // console.log(`[SIGNUP] New user registration: ${email}`);
 
-    User.create({ name, email, password: hashedPassword }, (err, result) => {
-      if (err) {
-        console.error(`[SIGNUP] Error creating user: ${err.message}`);
-        return res.status(500).json({ error: err.message });
-      }
-
-      // console.log(`[SIGNUP] User registered successfully: ${email}`);
-      res.json({ message: "User registered successfully!" });
+    const result = await UserModel.RegisterUser({
+      name,
+      email,
+      password: hashedPassword,
     });
-  });
+
+    res.status(201).json({
+      success: true,
+      message: "User registered successfully",
+      user: { id: result.insertId, name, email },
+    });
+  } catch (error) {
+    console.error("Signup error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };
 
-exports.login = (req, res) => {
-  const { email, password } = req.body;
-  console.log(`[LOGIN] Login attempt: ${email}`);
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  User.findByEmail(email, async (err, result) => {
-    if (err) {
-      console.error(`[LOGIN] Error finding user: ${err.message}`);
-      return res.status(500).json({ error: err.message });
+    if (!email || !password) {
+      res.status(400).json({
+        msg: "Email and password are required !",
+      });
     }
 
-    if (result.length === 0) {
-      console.log(`[LOGIN] User not found: ${email}`);
-      return res.status(400).json({ message: "User not found!" });
-    }
-
-    console.log(`[LOGIN] User found: ${email}`);
-    const user = result[0];
+    const data = await UserModel.findByEmail(email);
+    const user = data[0];
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
-      console.log(`[LOGIN] Invalid credentials for: ${email}`);
-      return res.status(400).json({ message: "Invalid credentials!" });
+      res.status(401).json({
+        msg: "Invalid credentials",
+      });
     }
-
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
       // expiresIn: "4h",
     });
-
-    console.log(`[LOGIN] Login successful: ${email}`);
-    res.json({ message: "Login successful!", token });
-  });
+    res.status(200).json({
+      msg: "Login succesfully",
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      token,
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+module.exports = {
+  signup,
+  login,
 };
