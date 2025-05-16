@@ -1,8 +1,8 @@
 const rentalModel = require("../models/rentalModel");
 exports.addRentalBook = async (req, res) => {
   try {
-    console.log("Received file:", req.file); // Debug uploaded file
-    console.log("Received body:", req.body); // Debug form-data
+    // console.log("Received file:", req.file); // Debug uploaded file
+    // console.log("Received body:", req.body); // Debug form-data
     const { book_id, rental_price, rental_duration } = req.body;
     const renter_id = req.user.id; // Assuming authentication middleware adds `req.user.id`
 
