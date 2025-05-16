@@ -3,7 +3,7 @@ const buyRequestModel = require("../models/buyRequestModel");
 exports.createBuyRequest = async (req, res) => {
   try {
     const { book_id, buyer_name, buyer_phone, buyer_location } = req.body;
-    const buyer_id = req.user.id; // Assuming buyer info is attached to req.user by auth middleware
+    const buyer_id = req.user.id; 
 
     if (!book_id || !buyer_name || !buyer_phone || !buyer_location) {
       return res.status(400).json({ error: "All fields are required" });

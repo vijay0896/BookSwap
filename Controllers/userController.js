@@ -1,5 +1,5 @@
 const db = require("../config/dbConfig");
-const redisClient = require("../config/redisClient");
+
 
 const userModel = require("../models/userModel");
 
@@ -104,8 +104,7 @@ exports.updateUserDetails = async (req, res) => {
             });
           }
 
-          await redisClient.del(`user:${userId}`);
-          await redisClient.del("users:all");
+         
 
           res.json({
             message: "User and contact details updated successfully",
