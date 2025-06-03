@@ -118,36 +118,34 @@ exports.updateBook = async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
-    // Check if the book exists before updating
     const existingBook = await bookModel.getBookById(id);
     if (!existingBook) {
       return res.status(404).json({ error: "Book not found" });
     }
 
-    // Prepare update object (only include fields provided in req.body)
-    const updatedBook = {};
+    const updatedBook = {
+      title: updates.title ?? undefined,
+      author: updates.author ?? undefined,
+      genre: updates.genre ?? undefined,
+      description: updates.description ?? undefined,
+      price: updates.price ?? undefined,
+      availability: updates.availability ?? undefined,
+      service_type: updates.service_type ?? undefined,
+    };
 
-    if (updates.title) updatedBook.title = updates.title;
-    if (updates.author) updatedBook.author = updates.author;
-    if (updates.genre) updatedBook.genre = updates.genre;
-    if (updates.description) updatedBook.description = updates.description;
-    if (updates.price !== undefined) updatedBook.price = updates.price;
-    if (updates.availability) updatedBook.availability = updates.availability;
-    if (updates.service_type) updatedBook.service_type = updates.service_type;
-
-    // If a new file is uploaded, update cover image URL
     if (req.file) {
-      updatedBook.cover_image_url = req.file.location; // AWS S3 file URL
+      updatedBook.cover_image_url = req.file.location;
     }
 
-    // If no updates are provided, return an error
+    Object.keys(updatedBook).forEach(
+      (key) => updatedBook[key] === undefined && delete updatedBook[key]
+    );
+
     if (Object.keys(updatedBook).length === 0) {
       return res.status(400).json({ error: "No valid fields provided for update" });
     }
 
-    // Update the book in the database
     await bookModel.updateBook(id, updatedBook);
-
     res.json({ message: "Book updated successfully", updatedBook });
   } catch (error) {
     console.error("Error in updateBook:", error);

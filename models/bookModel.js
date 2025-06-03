@@ -102,96 +102,127 @@ const Book = {
     });
   },
 
-  updateBook: (id, updates) => {
-    return new Promise((resolve, reject) => {
-      const sqlFetch = "SELECT * FROM books WHERE id = ?";
+updateBook: (id, updates = {}) => {
+  return new Promise((resolve, reject) => {
+    const sqlFetch = "SELECT * FROM books WHERE id = ?";
+    db.query(sqlFetch, [id], (err, results) => {
+      if (err) return reject(err);
+      if (results.length === 0) return reject({ error: "Book not found" });
 
-      db.query(sqlFetch, [id], (err, results) => {
-        if (err) return reject(err);
-        if (results.length === 0) return reject({ error: "Book not found" });
+      const existingBook = results[0];
 
-        const existingBook = results[0];
+      const title = updates.title ?? existingBook.title;
+      const author = updates.author ?? existingBook.author;
+      const genre = updates.genre ?? existingBook.genre;
+      const description = updates.description ?? existingBook.description;
+      const cover_image_url = updates.cover_image_url ?? existingBook.cover_image_url;
+      const availability = updates.availability ?? existingBook.availability;
+      const service_type = updates.service_type ?? existingBook.service_type;
 
-        const {
-          title = existingBook.title,
-          author = existingBook.author,
-          genre = existingBook.genre,
-          description = existingBook.description,
-          cover_image_url = existingBook.cover_image_url,
-          price = existingBook.price,
-          availability = updates.availability ?? existingBook.availability, // Handle NULL properly
-          service_type = updates.service_type ?? existingBook.service_type,
-        } = updates;
+      let price;
+      if (updates.price !== undefined && updates.price !== null && !isNaN(updates.price)) {
+        price = parseFloat(updates.price);
+      } else {
+        price = existingBook.price;
+      }
 
-        const sqlUpdate = `UPDATE books 
-          SET title=?, author=?, genre=?, description=?, cover_image_url=?, price=?, availability=?, service_type=? 
-          WHERE id=?`;
+      const sqlUpdate = `
+        UPDATE books 
+        SET title=?, author=?, genre=?, description=?, cover_image_url=?, price=?, availability=?, service_type=? 
+        WHERE id=?`;
 
-        db.query(
-          sqlUpdate,
-          [
-            title,
-            author,
-            genre,
-            description,
-            cover_image_url,
-            price,
-            availability,
-            service_type,
-            id,
-          ],
-          (err) => {
-            if (err) return reject(err);
+      db.query(
+        sqlUpdate,
+        [title, author, genre, description, cover_image_url, price, availability, service_type, id],
+        (err) => {
+          if (err) return reject(err);
 
-            // Handle resale_books insertion or deletion
-            if (service_type === "resale") {
-              // Check if the book already exists in resale_books
-              const checkResaleSql = `SELECT * FROM resale_books WHERE book_id = ?`;
-              db.query(checkResaleSql, [id], (err, resaleResults) => {
-                if (err) return reject(err);
+          // === Handle Resale ===
+          if (service_type === "resale") {
+            const checkResaleSql = `SELECT * FROM resale_books WHERE book_id = ?`;
+            db.query(checkResaleSql, [id], (err, resaleResults) => {
+              if (err) return reject(err);
 
-                if (resaleResults.length === 0) {
-                  // If the book is not in resale_books, insert it
-                  const insertResaleSql = `INSERT INTO resale_books (book_id, seller_id, price, status) VALUES (?, ?, ?, ?)`;
-                  db.query(
-                    insertResaleSql,
-                    [id, existingBook.owner_id, price, "available"],
-                    (err) => {
-                      if (err) return reject(err);
-                      resolve({
-                        message:
-                          "Book updated successfully and added to resale_books",
-                      });
-                    }
-                  );
-                } else {
-                  // If the book already exists in resale_books, update price and status
-                  const updateResaleSql = `UPDATE resale_books SET price=?, status=? WHERE book_id=?`;
-                  db.query(updateResaleSql, [price, "available", id], (err) => {
+              if (resaleResults.length === 0) {
+                const insertResaleSql = `INSERT INTO resale_books (book_id, seller_id, price, status) VALUES (?, ?, ?, ?)`;
+                db.query(
+                  insertResaleSql,
+                  [id, existingBook.owner_id, price, "available"],
+                  (err) => {
                     if (err) return reject(err);
-                    resolve({
-                      message:
-                        "Book updated successfully and resale details updated",
+                    const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
+                    db.query(deleteRentSql, [id], (err) => {
+                      if (err) return reject(err);
+                      resolve({ message: "Book updated and added to resale_books. Removed from rentEbooks." });
                     });
+                  }
+                );
+              } else {
+                const updateResaleSql = `UPDATE resale_books SET price=?, status=? WHERE book_id=?`;
+                db.query(updateResaleSql, [price, "available", id], (err) => {
+                  if (err) return reject(err);
+                  const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
+                  db.query(deleteRentSql, [id], (err) => {
+                    if (err) return reject(err);
+                    resolve({ message: "Book updated and resale details updated. Removed from rentEbooks." });
                   });
-                }
-              });
-            } else {
-              // If the service_type is changed from 'resale' to something else, remove it from resale_books
-              const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
-              db.query(deleteResaleSql, [id], (err) => {
-                if (err) return reject(err);
-                resolve({
-                  message:
-                    "Book updated successfully and removed from resale_books",
                 });
+              }
+            });
+
+          // === Handle Rental ===
+          } else if (service_type === "rental") {
+            const checkRentSql = `SELECT * FROM rentEbooks WHERE book_id = ?`;
+            db.query(checkRentSql, [id], (err, rentResults) => {
+              if (err) return reject(err);
+
+              if (rentResults.length === 0) {
+                const insertRentSql = `
+                  INSERT INTO rentEbooks (book_id, renter_id, rental_price, rental_duration, pdf_url, rental_status)
+                  VALUES (?, ?, ?, ?, ?, ?)`;
+                db.query(
+                  insertRentSql,
+                  [id, existingBook.owner_id, price, 7, existingBook.pdf_url || '', "active"],
+                  (err) => {
+                    if (err) return reject(err);
+                    const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+                    db.query(deleteResaleSql, [id], (err) => {
+                      if (err) return reject(err);
+                      resolve({ message: "Book updated and added to rentEbooks. Removed from resale_books." });
+                    });
+                  }
+                );
+              } else {
+                const updateRentSql = `UPDATE rentEbooks SET rental_price=?, rental_status=? WHERE book_id=?`;
+                db.query(updateRentSql, [price, "active", id], (err) => {
+                  if (err) return reject(err);
+                  const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+                  db.query(deleteResaleSql, [id], (err) => {
+                    if (err) return reject(err);
+                    resolve({ message: "Book and rental details updated. Removed from resale_books." });
+                  });
+                });
+              }
+            });
+
+          // === Handle Neither ===
+          } else {
+            const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+            const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
+            db.query(deleteResaleSql, [id], (err) => {
+              if (err) return reject(err);
+              db.query(deleteRentSql, [id], (err) => {
+                if (err) return reject(err);
+                resolve({ message: "Book updated and removed from both resale_books and rentEbooks" });
               });
-            }
+            });
           }
-        );
-      });
+        }
+      );
     });
-  },
+  });
+},
+
 
   deleteBook: (id) => {
     return new Promise((resolve, reject) => {
