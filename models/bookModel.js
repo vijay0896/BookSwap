@@ -206,7 +206,7 @@ const Book = {
         const key = `uploads/books/${sanitizedTitle}.jpg`;
 
         // Step 2: Delete from rentebooks
-        const deleteRentebooksSql = "DELETE FROM rentebooks WHERE book_id = ?";
+        const deleteRentebooksSql = "DELETE FROM rentEbooks WHERE book_id = ?";
         db.query(deleteRentebooksSql, [id], (err) => {
           if (err) return reject(err);
 
