@@ -37,7 +37,7 @@ exports.addBook = async (req, res) => {
       rental_duration,
     } = req.body;
 
-    const owner_id = req.user.id; // Assuming authentication middleware adds `req.user.id`
+    const owner_id = req.user.id;
 
     if (!title || !author || !service_type) {
       return res
@@ -45,33 +45,33 @@ exports.addBook = async (req, res) => {
         .json({ error: "Title, Author, and Service Type are required" });
     }
 
-    // Step 1: Insert book into the database
+    // Get cover image URL from Cloudinary upload
+    let cover_image_url = null;
+    if (req.files && req.files.cover_image && req.files.cover_image[0]) {
+      cover_image_url = req.files.cover_image[0].secure_url; // Use Cloudinary URL
+      console.log("📁 Cover image uploaded:", cover_image_url);
+    }
+
+    // Step 1: Insert book into the database with the image URL
     const bookData = {
       title,
       author,
       genre,
       description,
-      // cover_image_url: req.file ? req.file.location : null, // If image uploaded, get its S3 URL
-      cover_image_url: null,
+      cover_image_url, // Use the Cloudinary URL directly
       price,
       availability,
       owner_id,
       service_type,
     };
 
-    const { book_id } = await bookModel.addBook(bookData); // Insert into books table
+    const { book_id } = await bookModel.addBook(bookData);
 
     if (!book_id) {
       return res.status(500).json({ error: "Failed to add book" });
     }
 
-    // Step 2: Handle Image Upload
-    let cover_image_url = null;
-    if (req.files && req.files.cover_image) {
-      cover_image_url = req.files.cover_image[0].location; // Get uploaded image URL
-      await bookModel.updateBook(book_id, { cover_image_url }); // Update DB
-    }
-    // Step 3: If the book is for rental, upload the PDF & add it to the rentals table
+    // Step 2: Handle PDF for rental books
     let pdf_url = null;
 
     if (service_type === "rental") {
@@ -84,8 +84,9 @@ exports.addBook = async (req, res) => {
       }
 
       // Check if a PDF file is uploaded
-      if (req.files && req.files.pdf) {
-        pdf_url = req.files.pdf[0].location; // Get PDF URL from S3 upload
+      if (req.files && req.files.pdf && req.files.pdf[0]) {
+        pdf_url = req.files.pdf[0].secure_url; // Use Cloudinary URL for PDF
+        console.log("📄 PDF uploaded:", pdf_url);
       } else {
         return res
           .status(400)
@@ -112,7 +113,6 @@ exports.addBook = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
-
 exports.updateBook = async (req, res) => {
   try {
     const { id } = req.params;
@@ -124,19 +124,24 @@ exports.updateBook = async (req, res) => {
     }
 
     const updatedBook = {
-      title: updates.title ?? undefined,
-      author: updates.author ?? undefined,
-      genre: updates.genre ?? undefined,
-      description: updates.description ?? undefined,
-      price: updates.price ?? undefined,
-      availability: updates.availability ?? undefined,
-      service_type: updates.service_type ?? undefined,
+      title: updates.title ?? existingBook.title,
+      author: updates.author ?? existingBook.author,
+      genre: updates.genre ?? existingBook.genre,
+      description: updates.description ?? existingBook.description,
+      price: updates.price ?? existingBook.price,
+      rental_price: updates.rental_price ?? existingBook.rental_price,
+      rental_duration: updates.rental_duration ?? existingBook.rental_duration,
+      availability: updates.availability ?? existingBook.availability,
+      service_type: updates.service_type ?? existingBook.service_type,
     };
 
-    if (req.file) {
-      updatedBook.cover_image_url = req.file.location;
+    // Handle Cloudinary file upload
+    if (req.file && req.file.secure_url) {
+      updatedBook.cover_image_url = req.file.secure_url;
+      console.log("📁 Updated cover image:", req.file.secure_url);
     }
 
+    // Remove undefined values
     Object.keys(updatedBook).forEach(
       (key) => updatedBook[key] === undefined && delete updatedBook[key]
     );

@@ -102,127 +102,277 @@ const Book = {
     });
   },
 
-updateBook: (id, updates = {}) => {
-  return new Promise((resolve, reject) => {
-    const sqlFetch = "SELECT * FROM books WHERE id = ?";
-    db.query(sqlFetch, [id], (err, results) => {
-      if (err) return reject(err);
-      if (results.length === 0) return reject({ error: "Book not found" });
+  // updateBook: (id, updates = {}) => {
+  //   return new Promise((resolve, reject) => {
+  //     const sqlFetch = "SELECT * FROM books WHERE id = ?";
+  //     db.query(sqlFetch, [id], (err, results) => {
+  //       if (err) return reject(err);
+  //       if (results.length === 0) return reject({ error: "Book not found" });
 
-      const existingBook = results[0];
+  //       const existingBook = results[0];
 
-      const title = updates.title ?? existingBook.title;
-      const author = updates.author ?? existingBook.author;
-      const genre = updates.genre ?? existingBook.genre;
-      const description = updates.description ?? existingBook.description;
-      const cover_image_url = updates.cover_image_url ?? existingBook.cover_image_url;
-      const availability = updates.availability ?? existingBook.availability;
-      const service_type = updates.service_type ?? existingBook.service_type;
+  //       const title = updates.title ?? existingBook.title;
+  //       const author = updates.author ?? existingBook.author;
+  //       const genre = updates.genre ?? existingBook.genre;
+  //       const description = updates.description ?? existingBook.description;
+  //       const cover_image_url = updates.cover_image_url ?? existingBook.cover_image_url;
+  //       const availability = updates.availability ?? existingBook.availability;
+  //       const service_type = updates.service_type ?? existingBook.service_type;
 
-      let price;
-      if (updates.price !== undefined && updates.price !== null && !isNaN(updates.price)) {
-        price = parseFloat(updates.price);
-      } else {
-        price = existingBook.price;
-      }
+  //       let price;
+  //       if (updates.price !== undefined && updates.price !== null && !isNaN(updates.price)) {
+  //         price = parseFloat(updates.price);
+  //       } else {
+  //         price = existingBook.price;
+  //       }
 
-      const sqlUpdate = `
+  //       const sqlUpdate = `
+  //         UPDATE books 
+  //         SET title=?, author=?, genre=?, description=?, cover_image_url=?, price=?, availability=?, service_type=? 
+  //         WHERE id=?`;
+
+  //       db.query(
+  //         sqlUpdate,
+  //         [title, author, genre, description, cover_image_url, price, availability, service_type, id],
+  //         (err) => {
+  //           if (err) return reject(err);
+
+  //           // === Handle Resale ===
+  //           if (service_type === "resale") {
+  //             const checkResaleSql = `SELECT * FROM resale_books WHERE book_id = ?`;
+  //             db.query(checkResaleSql, [id], (err, resaleResults) => {
+  //               if (err) return reject(err);
+
+  //               if (resaleResults.length === 0) {
+  //                 const insertResaleSql = `INSERT INTO resale_books (book_id, seller_id, price, status) VALUES (?, ?, ?, ?)`;
+  //                 db.query(
+  //                   insertResaleSql,
+  //                   [id, existingBook.owner_id, price, "available"],
+  //                   (err) => {
+  //                     if (err) return reject(err);
+  //                     const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
+  //                     db.query(deleteRentSql, [id], (err) => {
+  //                       if (err) return reject(err);
+  //                       resolve({ message: "Book updated and added to resale_books. Removed from rentEbooks." });
+  //                     });
+  //                   }
+  //                 );
+  //               } else {
+  //                 const updateResaleSql = `UPDATE resale_books SET price=?, status=? WHERE book_id=?`;
+  //                 db.query(updateResaleSql, [price, "available", id], (err) => {
+  //                   if (err) return reject(err);
+  //                   const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
+  //                   db.query(deleteRentSql, [id], (err) => {
+  //                     if (err) return reject(err);
+  //                     resolve({ message: "Book updated and resale details updated. Removed from rentEbooks." });
+  //                   });
+  //                 });
+  //               }
+  //             });
+
+  //           // === Handle Rental ===
+  //           } else if (service_type === "rental") {
+  //             const checkRentSql = `SELECT * FROM rentEbooks WHERE book_id = ?`;
+  //             db.query(checkRentSql, [id], (err, rentResults) => {
+  //               if (err) return reject(err);
+
+  //               if (rentResults.length === 0) {
+  //                 const insertRentSql = `
+  //                   INSERT INTO rentEbooks (book_id, renter_id, rental_price, rental_duration, pdf_url, rental_status)
+  //                   VALUES (?, ?, ?, ?, ?, ?)`;
+  //                 db.query(
+  //                   insertRentSql,
+  //                   [id, existingBook.owner_id, price, 7, existingBook.pdf_url || '', "active"],
+  //                   (err) => {
+  //                     if (err) return reject(err);
+  //                     const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+  //                     db.query(deleteResaleSql, [id], (err) => {
+  //                       if (err) return reject(err);
+  //                       resolve({ message: "Book updated and added to rentEbooks. Removed from resale_books." });
+  //                     });
+  //                   }
+  //                 );
+  //               } else {
+  //                 const updateRentSql = `UPDATE rentEbooks SET rental_price=?, rental_status=? WHERE book_id=?`;
+  //                 db.query(updateRentSql, [price, "active", id], (err) => {
+  //                   if (err) return reject(err);
+  //                   const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+  //                   db.query(deleteResaleSql, [id], (err) => {
+  //                     if (err) return reject(err);
+  //                     resolve({ message: "Book and rental details updated. Removed from resale_books." });
+  //                   });
+  //                 });
+  //               }
+  //             });
+
+  //           // === Handle Neither ===
+  //           } else {
+  //             const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+  //             const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
+  //             db.query(deleteResaleSql, [id], (err) => {
+  //               if (err) return reject(err);
+  //               db.query(deleteRentSql, [id], (err) => {
+  //                 if (err) return reject(err);
+  //                 resolve({ message: "Book updated and removed from both resale_books and rentEbooks" });
+  //               });
+  //             });
+  //           }
+  //         }
+  //       );
+  //     });
+  //   });
+  // },
+
+  updateBook: (id, updates = {}) => {
+    return new Promise((resolve, reject) => {
+      const sqlFetch = "SELECT * FROM books WHERE id = ?";
+      db.query(sqlFetch, [id], (err, results) => {
+        if (err) return reject(err);
+        if (results.length === 0) return reject({ error: "Book not found" });
+
+        const existingBook = results[0];
+
+        const title = updates.title ?? existingBook.title;
+        const author = updates.author ?? existingBook.author;
+        const genre = updates.genre ?? existingBook.genre;
+        const description = updates.description ?? existingBook.description;
+        const cover_image_url = updates.cover_image_url ?? existingBook.cover_image_url;
+        const availability = updates.availability ?? existingBook.availability;
+        const service_type = updates.service_type ?? existingBook.service_type;
+
+        let price;
+        if (updates.price !== undefined && updates.price !== null && !isNaN(updates.price)) {
+          price = parseFloat(updates.price);
+        } else {
+          price = existingBook.price;
+        }
+
+        const sqlUpdate = `
         UPDATE books 
         SET title=?, author=?, genre=?, description=?, cover_image_url=?, price=?, availability=?, service_type=? 
         WHERE id=?`;
 
-      db.query(
-        sqlUpdate,
-        [title, author, genre, description, cover_image_url, price, availability, service_type, id],
-        (err) => {
-          if (err) return reject(err);
+        db.query(
+          sqlUpdate,
+          [title, author, genre, description, cover_image_url, price, availability, service_type, id],
+          (err) => {
+            if (err) return reject(err);
 
-          // === Handle Resale ===
-          if (service_type === "resale") {
-            const checkResaleSql = `SELECT * FROM resale_books WHERE book_id = ?`;
-            db.query(checkResaleSql, [id], (err, resaleResults) => {
-              if (err) return reject(err);
+            // === Handle Resale ===
+            if (service_type === "resale") {
+              const checkResaleSql = `SELECT * FROM resale_books WHERE book_id = ?`;
+              db.query(checkResaleSql, [id], (err, resaleResults) => {
+                if (err) return reject(err);
 
-              if (resaleResults.length === 0) {
-                const insertResaleSql = `INSERT INTO resale_books (book_id, seller_id, price, status) VALUES (?, ?, ?, ?)`;
-                db.query(
-                  insertResaleSql,
-                  [id, existingBook.owner_id, price, "available"],
-                  (err) => {
+                if (resaleResults.length === 0) {
+                  const insertResaleSql = `INSERT INTO resale_books (book_id, seller_id, price, status) VALUES (?, ?, ?, ?)`;
+                  db.query(
+                    insertResaleSql,
+                    [id, existingBook.owner_id, price, "available"],
+                    (err) => {
+                      if (err) return reject(err);
+                      const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
+                      db.query(deleteRentSql, [id], (err) => {
+                        if (err) return reject(err);
+                        resolve({ message: "Book updated and added to resale_books. Removed from rentEbooks." });
+                      });
+                    }
+                  );
+                } else {
+                  const updateResaleSql = `UPDATE resale_books SET price=?, status=? WHERE book_id=?`;
+                  db.query(updateResaleSql, [price, "available", id], (err) => {
                     if (err) return reject(err);
                     const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
                     db.query(deleteRentSql, [id], (err) => {
                       if (err) return reject(err);
-                      resolve({ message: "Book updated and added to resale_books. Removed from rentEbooks." });
+                      resolve({ message: "Book updated and resale details updated. Removed from rentEbooks." });
                     });
-                  }
-                );
-              } else {
-                const updateResaleSql = `UPDATE resale_books SET price=?, status=? WHERE book_id=?`;
-                db.query(updateResaleSql, [price, "available", id], (err) => {
-                  if (err) return reject(err);
-                  const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
-                  db.query(deleteRentSql, [id], (err) => {
-                    if (err) return reject(err);
-                    resolve({ message: "Book updated and resale details updated. Removed from rentEbooks." });
                   });
-                });
-              }
-            });
-
-          // === Handle Rental ===
-          } else if (service_type === "rental") {
-            const checkRentSql = `SELECT * FROM rentEbooks WHERE book_id = ?`;
-            db.query(checkRentSql, [id], (err, rentResults) => {
-              if (err) return reject(err);
-
-              if (rentResults.length === 0) {
-                const insertRentSql = `
-                  INSERT INTO rentEbooks (book_id, renter_id, rental_price, rental_duration, pdf_url, rental_status)
-                  VALUES (?, ?, ?, ?, ?, ?)`;
-                db.query(
-                  insertRentSql,
-                  [id, existingBook.owner_id, price, 7, existingBook.pdf_url || '', "active"],
-                  (err) => {
-                    if (err) return reject(err);
-                    const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
-                    db.query(deleteResaleSql, [id], (err) => {
-                      if (err) return reject(err);
-                      resolve({ message: "Book updated and added to rentEbooks. Removed from resale_books." });
-                    });
-                  }
-                );
-              } else {
-                const updateRentSql = `UPDATE rentEbooks SET rental_price=?, rental_status=? WHERE book_id=?`;
-                db.query(updateRentSql, [price, "active", id], (err) => {
-                  if (err) return reject(err);
-                  const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
-                  db.query(deleteResaleSql, [id], (err) => {
-                    if (err) return reject(err);
-                    resolve({ message: "Book and rental details updated. Removed from resale_books." });
-                  });
-                });
-              }
-            });
-
-          // === Handle Neither ===
-          } else {
-            const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
-            const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
-            db.query(deleteResaleSql, [id], (err) => {
-              if (err) return reject(err);
-              db.query(deleteRentSql, [id], (err) => {
-                if (err) return reject(err);
-                resolve({ message: "Book updated and removed from both resale_books and rentEbooks" });
+                }
               });
-            });
-          }
-        }
-      );
-    });
-  });
-},
 
+              // === Handle Rental ===
+            } else if (service_type === "rental") {
+              const checkRentSql = `SELECT * FROM rentEbooks WHERE book_id = ?`;
+              db.query(checkRentSql, [id], (err, rentResults) => {
+                if (err) return reject(err);
+
+                // If record already exists, reuse old values
+                const existingRental = rentResults.length > 0 ? rentResults[0] : null;
+
+                const rental_price =
+                  updates.rental_price !== undefined && updates.rental_price !== null
+                    ? parseFloat(updates.rental_price)
+                    : (existingRental ? existingRental.rental_price : null);
+
+                const rental_duration =
+                  updates.rental_duration !== undefined && updates.rental_duration !== null
+                    ? parseInt(updates.rental_duration)
+                    : (existingRental ? existingRental.rental_duration : 7);
+
+                const pdf_url =
+                  updates.pdf_url || (existingRental ? existingRental.pdf_url : existingBook.pdf_url) || "";
+
+                // === Validation ===
+                if (!rental_price || rental_price <= 0) {
+                  return reject({ error: "Valid rental price is required for rental books" });
+                }
+
+                if (!existingRental) {
+                  // Insert new rental record
+                  const insertRentSql = `
+        INSERT INTO rentEbooks (book_id, renter_id, rental_price, rental_duration, pdf_url, rental_status)
+        VALUES (?, ?, ?, ?, ?, ?)`;
+                  db.query(
+                    insertRentSql,
+                    [id, existingBook.owner_id, rental_price, rental_duration, pdf_url, "active"],
+                    (err) => {
+                      if (err) return reject(err);
+                      const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+                      db.query(deleteResaleSql, [id], (err) => {
+                        if (err) return reject(err);
+                        resolve({ message: "Book updated and added to rentEbooks. Removed from resale_books." });
+                      });
+                    }
+                  );
+                } else {
+                  // Update existing rental record
+                  const updateRentSql = `
+        UPDATE rentEbooks SET rental_price=?, rental_duration=?, pdf_url=?, rental_status=? WHERE book_id=?`;
+                  db.query(
+                    updateRentSql,
+                    [rental_price, rental_duration, pdf_url, "active", id],
+                    (err) => {
+                      if (err) return reject(err);
+                      const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+                      db.query(deleteResaleSql, [id], (err) => {
+                        if (err) return reject(err);
+                        resolve({ message: "Book and rental details updated. Removed from resale_books." });
+                      });
+                    }
+                  );
+                }
+              });
+
+
+
+              // === Handle Neither ===
+            } else {
+              const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
+              const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
+              db.query(deleteResaleSql, [id], (err) => {
+                if (err) return reject(err);
+                db.query(deleteRentSql, [id], (err) => {
+                  if (err) return reject(err);
+                  resolve({ message: "Book updated and removed from both resale_books and rentEbooks" });
+                });
+              });
+            }
+          }
+        );
+      });
+    });
+  },
 
   deleteBook: (id) => {
     return new Promise((resolve, reject) => {

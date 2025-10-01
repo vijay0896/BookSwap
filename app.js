@@ -15,12 +15,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 var corsOptions = {
-  origin: [
-    "http://localhost:8080",
-    "http://192.168.162.43:8080",
-    "http://10.21.2.159:8080",
-    "https://vijay-book-swap.up.railway.app",
-  ],
+  origin: ["http://10.25.128.43:8080", "exp://10.25.128.43:8081"], // Mac LAN IP + Expo
   methods: "GET,POST,PUT,PATCH,DELETE,HEAD",
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"],
