@@ -4,11 +4,15 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const db = mysql.createConnection({
-  host: process.env.DB_HOST || "127.0.0.1",
+  host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
-  // connectTimeout: 10000, // 10 seconds
+  port: process.env.DB_PORT ,
+  ssl: {
+    rejectUnauthorized: false, // SSL required by Aiven
+  },
+  connectTimeout: 10000, // optional: 10 seconds
 });
 
 db.connect((err) => {
@@ -20,3 +24,4 @@ db.connect((err) => {
 });
 
 module.exports = db;
+
