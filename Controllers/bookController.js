@@ -49,7 +49,7 @@ exports.addBook = async (req, res) => {
     let cover_image_url = null;
     if (req.files && req.files.cover_image && req.files.cover_image[0]) {
       cover_image_url = req.files.cover_image[0].secure_url; // Use Cloudinary URL
-      console.log("📁 Cover image uploaded:", cover_image_url);
+      // console.log("📁 Cover image uploaded:", cover_image_url);
     }
 
     // Step 1: Insert book into the database with the image URL
@@ -86,7 +86,7 @@ exports.addBook = async (req, res) => {
       // Check if a PDF file is uploaded
       if (req.files && req.files.pdf && req.files.pdf[0]) {
         pdf_url = req.files.pdf[0].secure_url; // Use Cloudinary URL for PDF
-        console.log("📄 PDF uploaded:", pdf_url);
+        // console.log("📄 PDF uploaded:", pdf_url);
       } else {
         return res
           .status(400)
@@ -138,7 +138,7 @@ exports.updateBook = async (req, res) => {
     // Handle Cloudinary file upload
     if (req.file && req.file.secure_url) {
       updatedBook.cover_image_url = req.file.secure_url;
-      console.log("📁 Updated cover image:", req.file.secure_url);
+      // console.log("📁 Updated cover image:", req.file.secure_url);
     }
 
     // Remove undefined values
