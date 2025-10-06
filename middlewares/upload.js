@@ -147,14 +147,14 @@ const uploadUserImage = [
       });
 
       // Debug logs
-      console.log("📁 Upload options sent to Cloudinary:", {
-        public_id: `uploads/usersImg/${req.user.id}`,
-      });
-      console.log("📁 Cloudinary result:", {
-        secure_url: result.secure_url,
-        public_id: result.public_id,
-        folder: result.folder,
-      });
+      // console.log("📁 Upload options sent to Cloudinary:", {
+      //   public_id: `uploads/usersImg/${req.user.id}`,
+      // });
+      // console.log("📁 Cloudinary result:", {
+      //   secure_url: result.secure_url,
+      //   public_id: result.public_id,
+      //   folder: result.folder,
+      // });
 
       req.file.secure_url = result.secure_url;
       req.file.public_id = result.public_id;
