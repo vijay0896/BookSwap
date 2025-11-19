@@ -1,38 +1,39 @@
-
 const jwt = require("jsonwebtoken");
 const db = require("../config/dbConfig");
-const authMiddleware = (req, res, next) => {
-  // console.log("Headers Received:", req.headers); // Debugging
 
-  const authHeader = req.header("Authorization");
-
-  if (!authHeader) {
-    return res.status(401).json({ message: "Unauthorized, token missing" });
-  }
-
-  const token = authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
-  // console.log("Extracted Token:", token); // Debugging
-
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized, token missing" });
-  }
-
+const authMiddleware = async (req, res, next) => {
   try {
+    const authHeader = req.header("Authorization");
+
+    if (!authHeader) {
+      return res.status(401).json({ message: "Unauthorized, token missing" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized, token missing" });
+    }
+
+    // Verify JWT
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    db.query("SELECT id, email FROM users WHERE id = ?", [decoded.id], (err, results) => {
-      if (err || results.length === 0) {
-        return res.status(401).json({ message: "User not found" });
-      }
+    // Fetch user using mysql2/promise
+    const [rows] = await db.query(
+      "SELECT id, email FROM users WHERE id = ?",
+      [decoded.id]
+    );
 
-      req.user = results[0]; // Attach user info to request
-      next();
-    });
+    if (!rows.length) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    req.user = rows[0]; // attach user
+    next();
 
   } catch (error) {
-    return res.status(401).json({ message: "Invalid token" });
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 };
-
 
 module.exports = authMiddleware;
