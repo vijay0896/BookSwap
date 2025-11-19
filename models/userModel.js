@@ -1,32 +1,25 @@
-const { promise } = require("zod");
+
 const db = require("../config/dbConfig");
 
-const findByEmail = (email) => {
-  return new Promise((resolve, reject) => {
-    db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
-      if (err) return reject(err);
-      resolve(results);
-    });
-  });
+// FIND BY EMAIL
+const findByEmail = async (email) => {
+  const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+  return rows; // array
 };
 
-const RegisterUser = ({ name, email, password }) => {
-  return new Promise((resolve, reject) => {
-    db.query(
-      "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-      [name, email, password],
-      (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      }
-    );
-  });
+const RegisterUser = async ({ name, email, password }) => {
+  const [result] = await db.query(
+    "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
+    [name, email, password]
+  );
+  return result;
 };
 
-const getUserDetails = (userId) => {
-  return new Promise((resolve, reject) => {
-    const query = `
-     SELECT 
+// USER DETAILS
+const getUserDetails = async (userId) => {
+  const [result] = await db.query(
+    `
+      SELECT 
         users.id, users.name, users.email, users.profile_image AS profileImage,
         contacts.phone, contacts.address, contacts.latitude, contacts.longitude,
         (
@@ -35,60 +28,58 @@ const getUserDetails = (userId) => {
       FROM users
       LEFT JOIN contacts ON users.id = contacts.user_id
       WHERE users.id = ?
-    `;
+    `,
+    [userId]
+  );
 
-    db.query(query, [userId], (err, result) => {
-      if (err) return reject(err);
-      resolve(result);
-    });
-  });
+  return result;
 };
 
-const getAllUsers = () => {
-  return new Promise((resolve, reject) => {
-    const query = `SELECT 
+const getAllUsers = async () => {
+  const [result] = await db.query(
+    `
+      SELECT 
         users.id, users.name, users.email, users.profile_image AS profileImage,
         contacts.phone, contacts.address, contacts.latitude, contacts.longitude,
         (
           SELECT COUNT(*) FROM books WHERE books.owner_id = users.id
         ) AS totalBooks
       FROM users
-      LEFT JOIN contacts ON users.id = contacts.user_id`;
-    db.query(query, (err, result) => {
-      if (err) return reject(err);
-      resolve(result);
-    });
-  });
+      LEFT JOIN contacts ON users.id = contacts.user_id
+    `
+  );
+
+  return result;
 };
 
-const getUserDetailsById = (userId) => {
-  return new Promise((resolve, reject) => {
-    const query = `
+const getUserDetailsById = async (userId) => {
+  const [result] = await db.query(
+    `
       SELECT u.name, u.email, c.phone, c.address, c.latitude, c.longitude, u.profile_image 
       FROM users u 
       LEFT JOIN contacts c ON u.id = c.user_id 
       WHERE u.id = ?
-    `;
-    db.query(query, [userId], (err, result) => {
-      if (err) return reject(err);
-      resolve(result[0]);
-    });
-  });
+    `,
+    [userId]
+  );
+
+  return result[0];
 };
-const updateUser = (userId, name, email, profileImageUrl) => {
-  return new Promise((resolve, reject) => {
-    const query = `
+
+const updateUser = async (userId, name, email, profileImageUrl) => {
+  const [result] = await db.query(
+    `
       UPDATE users SET name = ?, email = ?, profile_image = ? WHERE id = ?
-    `;
-    db.query(query, [name, email, profileImageUrl, userId], (err, result) => {
-      if (err) return reject(err);
-      resolve(result);
-    });
-  });
+    `,
+    [name, email, profileImageUrl, userId]
+  );
+
+  return result;
 };
-const upsertContact = (userId, phone, address, email, latitude, longitude) => {
-  return new Promise((resolve, reject) => {
-    const query = `
+
+const upsertContact = async (userId, phone, address, email, latitude, longitude) => {
+  const [result] = await db.query(
+    `
       INSERT INTO contacts (user_id, phone, address, email, latitude, longitude)
       VALUES (?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
@@ -97,16 +88,33 @@ const upsertContact = (userId, phone, address, email, latitude, longitude) => {
         email = VALUES(email),
         latitude = VALUES(latitude),
         longitude = VALUES(longitude)
-    `;
-    db.query(
-      query,
-      [userId, phone, address, email, latitude, longitude],
-      (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      }
-    );
-  });
+    `,
+    [userId, phone, address, email, latitude, longitude]
+  );
+
+  return result;
+};
+
+// OTP FUNCTIONS
+const saveOTP = async (userId, otp, expiry) => {
+  const [result] = await db.query(
+    "UPDATE users SET reset_otp=?, reset_otp_exp=? WHERE id=?",
+    [otp, expiry, userId]
+  );
+  return result;
+};
+
+const getUserByEmail = async (email) => {
+  const [rows] = await db.query("SELECT * FROM users WHERE email=?", [email]);
+  return rows[0];
+};
+
+const updatePassword = async (userId, password) => {
+  const [result] = await db.query(
+    `UPDATE users SET password=?, reset_otp=NULL, reset_otp_exp=NULL WHERE id=?`,
+    [password, userId]
+  );
+  return result;
 };
 
 module.exports = {
@@ -117,4 +125,7 @@ module.exports = {
   getUserDetailsById,
   updateUser,
   upsertContact,
+  getUserByEmail,
+  updatePassword,
+  saveOTP
 };

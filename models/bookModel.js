@@ -1,54 +1,73 @@
+
+
 const db = require("../config/dbConfig");
 
-const s3 = require("../config/awsS3Config"); // ✅ S3 instance
-const { DeleteObjectCommand } = require("@aws-sdk/client-s3");
-const Book = {
-  getAllBooks: (serviceType = null) => {
-    return new Promise((resolve, reject) => {
-      let sql = `
-        SELECT 
-        books.*, 
-        users.name AS owner_name,
-        rentEbooks.rental_price,
-        rentEbooks.pdf_url
-      FROM books
-      JOIN users ON books.owner_id = users.id
-      LEFT JOIN rentEbooks ON rentEbooks.book_id = books.id
-      `;
-      const params = [];
+// =======================
+// GET ALL BOOKS
+// =======================
+const getAllBooks = async (serviceType = null) => {
+  let sql = `
+    SELECT 
+      books.*, 
+      users.name AS owner_name,
+      rentEbooks.rental_price,
+      rentEbooks.pdf_url
+    FROM books
+    JOIN users ON books.owner_id = users.id
+    LEFT JOIN rentEbooks ON rentEbooks.book_id = books.id
+  `;
 
-      if (serviceType) {
-        sql += " WHERE books.service_type = ?";
-        params.push(serviceType);
-      }
+  const params = [];
 
-      db.query(sql, params, (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      });
-    });
-  },
+  if (serviceType) {
+    sql += " WHERE books.service_type = ?";
+    params.push(serviceType);
+  }
 
-  getBooksByOwnerId: (owner_id) => {
-    return new Promise((resolve, reject) => {
-      const sql = "SELECT * FROM books WHERE owner_id = ?";
-      db.query(sql, [owner_id], (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      });
-    });
-  },
-  getBookById: (id) => {
-    return new Promise((resolve, reject) => {
-      const sql = "SELECT * FROM books WHERE id = ?";
-      db.query(sql, [id], (err, result) => {
-        if (err) reject(err);
-        resolve(result[0] || null);
-      });
-    });
-  },
+  const [rows] = await db.query(sql, params);
+  return rows;
+};
 
-  addBook: ({
+// =======================
+// GET BY OWNER
+// =======================
+const getBooksByOwnerId = async (owner_id) => {
+  const [rows] = await db.query(
+    "SELECT * FROM books WHERE owner_id = ?",
+    [owner_id]
+  );
+  return rows;
+};
+
+// =======================
+// GET BOOK BY ID
+// =======================
+const getBookById = async (id) => {
+  const [rows] = await db.query("SELECT * FROM books WHERE id = ?", [id]);
+  return rows[0] || null;
+};
+
+// =======================
+// ADD BOOK
+// =======================
+const addBook = async ({
+  title,
+  author,
+  genre,
+  description,
+  cover_image_url,
+  price,
+  availability,
+  owner_id,
+  service_type,
+}) => {
+  const sql = `
+    INSERT INTO books 
+    (title, author, genre, description, cover_image_url, price, availability, owner_id, service_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  const [result] = await db.query(sql, [
     title,
     author,
     genre,
@@ -58,272 +77,212 @@ const Book = {
     availability,
     owner_id,
     service_type,
-  }) => {
-    return new Promise((resolve, reject) => {
-      const sql = `INSERT INTO books 
-          (title, author, genre, description, cover_image_url, price, availability, owner_id, service_type) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  ]);
 
-      db.query(
-        sql,
-        [
-          title,
-          author,
-          genre,
-          description,
-          cover_image_url,
-          price,
-          availability,
-          owner_id,
-          service_type,
-        ],
-        (err, result) => {
-          if (err) return reject(err);
+  const book_id = result.insertId;
 
-          const book_id = result.insertId; // Get the inserted book's ID
+  if (service_type === "resale") {
+    const [resale] = await db.query(
+      `INSERT INTO resale_books (book_id, seller_id, price, status)
+       VALUES (?, ?, ?, 'available')`,
+      [book_id, owner_id, price]
+    );
+    return { book_id, resale_id: resale.insertId };
+  }
 
-          // If the book is for resale, insert it into the resale_books table
-          if (service_type === "resale") {
-            const resaleSql = `INSERT INTO resale_books (book_id, seller_id, price, status) VALUES (?, ?, ?, ?)`;
+  return { book_id };
+};
 
-            db.query(
-              resaleSql,
-              [book_id, owner_id, price, "available"],
-              (err, resaleResult) => {
-                if (err) return reject(err);
-                resolve({ book_id, resale_id: resaleResult.insertId });
-              }
-            );
-          } else {
-            resolve({ book_id });
-          }
-        }
+// =======================
+// UPDATE BOOK (FIXED)
+// =======================
+const updateBook = async (id, updates) => {
+  const existingBook = await getBookById(id);
+  if (!existingBook) throw new Error("Book not found");
+
+  // Merge incoming updates with existing DB record
+  const merged = { ...existingBook, ...updates };
+
+  // 🛑 Clean invalid / empty / undefined values for "price"
+  merged.price =
+    merged.price === undefined ||
+    merged.price === null ||
+    merged.price === "" ||
+    isNaN(Number(merged.price))
+      ? existingBook.price
+      : Number(merged.price);
+
+  merged.availability = merged.availability ?? existingBook.availability;
+  merged.service_type = merged.service_type ?? existingBook.service_type;
+  merged.cover_image_url =
+    merged.cover_image_url || existingBook.cover_image_url;
+
+  // ===========================
+  // UPDATE MAIN TABLE
+  // ===========================
+  await db.query(
+    `
+    UPDATE books
+    SET title=?, author=?, genre=?, description=?, cover_image_url=?, 
+        price=?, availability=?, service_type=?
+    WHERE id=?
+    `,
+    [
+      merged.title,
+      merged.author,
+      merged.genre,
+      merged.description,
+      merged.cover_image_url,
+      merged.price,
+      merged.availability,
+      merged.service_type,
+      id,
+    ]
+  );
+
+  // ===================================
+  // IF RESALE BOOK
+  // ===================================
+  if (merged.service_type === "resale") {
+    const [existingResale] = await db.query(
+      "SELECT * FROM resale_books WHERE book_id=?",
+      [id]
+    );
+
+    if (existingResale.length === 0) {
+      await db.query(
+        `INSERT INTO resale_books (book_id, seller_id, price, status)
+         VALUES (?, ?, ?, 'available')`,
+        [id, existingBook.owner_id, merged.price]
       );
-    });
-  },
+    } else {
+      await db.query(
+        `UPDATE resale_books 
+         SET price=?, status='available' 
+         WHERE book_id=?`,
+        [merged.price, id]
+      );
+    }
 
+    // Remove rental record
+    await db.query("DELETE FROM rentEbooks WHERE book_id=?", [id]);
 
-  updateBook: (id, updates = {}) => {
-    return new Promise((resolve, reject) => {
-      const sqlFetch = "SELECT * FROM books WHERE id = ?";
-      db.query(sqlFetch, [id], (err, results) => {
-        if (err) return reject(err);
-        if (results.length === 0) return reject({ error: "Book not found" });
+    return { message: "Resale book updated", updated: merged };
+  }
 
-        const existingBook = results[0];
+  // ===================================
+  // IF RENTAL BOOK
+  // ===================================
+  if (merged.service_type === "rental") {
+    const [existingRental] = await db.query(
+      "SELECT * FROM rentEbooks WHERE book_id=?",
+      [id]
+    );
 
-        const title = updates.title ?? existingBook.title;
-        const author = updates.author ?? existingBook.author;
-        const genre = updates.genre ?? existingBook.genre;
-        const description = updates.description ?? existingBook.description;
-        const cover_image_url = updates.cover_image_url ?? existingBook.cover_image_url;
-        const availability = updates.availability ?? existingBook.availability;
-        const service_type = updates.service_type ?? existingBook.service_type;
+    const rental_price =
+      updates.rental_price ??
+      existingRental[0]?.rental_price ??
+      null;
 
-        let price;
-        if (updates.price !== undefined && updates.price !== null && !isNaN(updates.price)) {
-          price = parseFloat(updates.price);
-        } else {
-          price = existingBook.price;
-        }
+    const rental_duration =
+      updates.rental_duration ??
+      existingRental[0]?.rental_duration ??
+      7;
 
-        const sqlUpdate = `
-        UPDATE books 
-        SET title=?, author=?, genre=?, description=?, cover_image_url=?, price=?, availability=?, service_type=? 
-        WHERE id=?`;
+    const pdf_url =
+      updates.pdf_url ??
+      existingRental[0]?.pdf_url ??
+      null;
 
-        db.query(
-          sqlUpdate,
-          [title, author, genre, description, cover_image_url, price, availability, service_type, id],
-          (err) => {
-            if (err) return reject(err);
+    if (!rental_price)
+      throw new Error("Rental price required for rental books");
 
-            // === Handle Resale ===
-            if (service_type === "resale") {
-              const checkResaleSql = `SELECT * FROM resale_books WHERE book_id = ?`;
-              db.query(checkResaleSql, [id], (err, resaleResults) => {
-                if (err) return reject(err);
+    if (existingRental.length === 0) {
+      await db.query(
+        `INSERT INTO rentEbooks 
+        (book_id, renter_id, rental_price, rental_duration, pdf_url, rental_status)
+        VALUES (?, ?, ?, ?, ?, 'active')`,
+        [
+          id,
+          existingBook.owner_id,
+          rental_price,
+          rental_duration,
+          pdf_url,
+        ]
+      );
+    } else {
+      await db.query(
+        `UPDATE rentEbooks 
+         SET rental_price=?, rental_duration=?, pdf_url=?, rental_status='active'
+         WHERE book_id=?`,
+        [
+          rental_price,
+          rental_duration,
+          pdf_url,
+          id,
+        ]
+      );
+    }
 
-                if (resaleResults.length === 0) {
-                  const insertResaleSql = `INSERT INTO resale_books (book_id, seller_id, price, status) VALUES (?, ?, ?, ?)`;
-                  db.query(
-                    insertResaleSql,
-                    [id, existingBook.owner_id, price, "available"],
-                    (err) => {
-                      if (err) return reject(err);
-                      const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
-                      db.query(deleteRentSql, [id], (err) => {
-                        if (err) return reject(err);
-                        resolve({ message: "Book updated and added to resale_books. Removed from rentEbooks." });
-                      });
-                    }
-                  );
-                } else {
-                  const updateResaleSql = `UPDATE resale_books SET price=?, status=? WHERE book_id=?`;
-                  db.query(updateResaleSql, [price, "available", id], (err) => {
-                    if (err) return reject(err);
-                    const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
-                    db.query(deleteRentSql, [id], (err) => {
-                      if (err) return reject(err);
-                      resolve({ message: "Book updated and resale details updated. Removed from rentEbooks." });
-                    });
-                  });
-                }
-              });
+    // Delete resale info
+    await db.query("DELETE FROM resale_books WHERE book_id=?", [id]);
 
-              // === Handle Rental ===
-            } else if (service_type === "rental") {
-              const checkRentSql = `SELECT * FROM rentEbooks WHERE book_id = ?`;
-              db.query(checkRentSql, [id], (err, rentResults) => {
-                if (err) return reject(err);
+    return { message: "Rental book updated", updated: merged };
+  }
 
-                // If record already exists, reuse old values
-                const existingRental = rentResults.length > 0 ? rentResults[0] : null;
+  // ===================================
+  // NEITHER resale nor rental
+  // ===================================
+  await db.query("DELETE FROM resale_books WHERE book_id=?", [id]);
+  await db.query("DELETE FROM rentEbooks WHERE book_id=?", [id]);
 
-                const rental_price =
-                  updates.rental_price !== undefined && updates.rental_price !== null
-                    ? parseFloat(updates.rental_price)
-                    : (existingRental ? existingRental.rental_price : null);
+  return { message: "Book updated", updated: merged };
+};
 
-                const rental_duration =
-                  updates.rental_duration !== undefined && updates.rental_duration !== null
-                    ? parseInt(updates.rental_duration)
-                    : (existingRental ? existingRental.rental_duration : 7);
+// =======================
+// DELETE BOOK
+// =======================
+const deleteBook = async (id) => {
+  await db.query("DELETE FROM rentEbooks WHERE book_id=?", [id]);
+  await db.query("DELETE FROM resale_books WHERE book_id=?", [id]);
+  await db.query("DELETE FROM books WHERE id=?", [id]);
 
-                const pdf_url =
-                  updates.pdf_url || (existingRental ? existingRental.pdf_url : existingBook.pdf_url) || "";
+  return { message: "Book deleted successfully" };
+};
 
-                // === Validation ===
-                if (!rental_price || rental_price <= 0) {
-                  return reject({ error: "Valid rental price is required for rental books" });
-                }
+// =======================
+// ADD RENTAL BOOK
+// =======================
+const addRentalBook = async ({
+  book_id,
+  renter_id,
+  rental_price,
+  rental_duration,
+  pdf_url,
+}) => {
+  const sql = `
+    INSERT INTO rentEbooks 
+    (book_id, renter_id, rental_price, rental_duration, pdf_url, rental_status)
+    VALUES (?, ?, ?, ?, ?, 'active')
+  `;
 
-                if (!existingRental) {
-                  // Insert new rental record
-                  const insertRentSql = `
-        INSERT INTO rentEbooks (book_id, renter_id, rental_price, rental_duration, pdf_url, rental_status)
-        VALUES (?, ?, ?, ?, ?, ?)`;
-                  db.query(
-                    insertRentSql,
-                    [id, existingBook.owner_id, rental_price, rental_duration, pdf_url, "active"],
-                    (err) => {
-                      if (err) return reject(err);
-                      const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
-                      db.query(deleteResaleSql, [id], (err) => {
-                        if (err) return reject(err);
-                        resolve({ message: "Book updated and added to rentEbooks. Removed from resale_books." });
-                      });
-                    }
-                  );
-                } else {
-                  // Update existing rental record
-                  const updateRentSql = `
-        UPDATE rentEbooks SET rental_price=?, rental_duration=?, pdf_url=?, rental_status=? WHERE book_id=?`;
-                  db.query(
-                    updateRentSql,
-                    [rental_price, rental_duration, pdf_url, "active", id],
-                    (err) => {
-                      if (err) return reject(err);
-                      const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
-                      db.query(deleteResaleSql, [id], (err) => {
-                        if (err) return reject(err);
-                        resolve({ message: "Book and rental details updated. Removed from resale_books." });
-                      });
-                    }
-                  );
-                }
-              });
-
-
-
-              // === Handle Neither ===
-            } else {
-              const deleteResaleSql = `DELETE FROM resale_books WHERE book_id = ?`;
-              const deleteRentSql = `DELETE FROM rentEbooks WHERE book_id = ?`;
-              db.query(deleteResaleSql, [id], (err) => {
-                if (err) return reject(err);
-                db.query(deleteRentSql, [id], (err) => {
-                  if (err) return reject(err);
-                  resolve({ message: "Book updated and removed from both resale_books and rentEbooks" });
-                });
-              });
-            }
-          }
-        );
-      });
-    });
-  },
-
-  deleteBook: (id) => {
-    return new Promise((resolve, reject) => {
-      // Step 1: Get the book title from DB
-      const getTitleSql = "SELECT title FROM books WHERE id = ?";
-      db.query(getTitleSql, [id], (err, results) => {
-        if (err) return reject(err);
-        if (results.length === 0) return reject(new Error("Book not found"));
-
-        const title = results[0].title;
-        const sanitizedTitle = title.replace(/\s+/g, "-").toLowerCase();
-        const key = `uploads/books/${sanitizedTitle}.jpg`;
-
-        // Step 2: Delete from rentebooks
-        const deleteRentebooksSql = "DELETE FROM rentEbooks WHERE book_id = ?";
-        db.query(deleteRentebooksSql, [id], (err) => {
-          if (err) return reject(err);
-
-          // Step 3: Delete from resale_books
-          const deleteResaleBooksSql =
-            "DELETE FROM resale_books WHERE book_id = ?";
-          db.query(deleteResaleBooksSql, [id], async (err) => {
-            if (err) return reject(err);
-
-            // Step 4: Delete image from S3
-            try {
-              await s3.send(
-                new DeleteObjectCommand({
-                  Bucket: process.env.AWS_S3_BUCKET_NAME,
-                  Key: key,
-                })
-              );
-              // console.log("S3 image deleted:", key);
-            } catch (s3Err) {
-              // console.error("Failed to delete image from S3:", s3Err);
-            }
-
-            // Step 5: Delete book
-            const deleteBookSql = "DELETE FROM books WHERE id = ?";
-            db.query(deleteBookSql, [id], (err) => {
-              if (err) return reject(err);
-              resolve({ message: "Book and image deleted successfully" });
-            });
-          });
-        });
-      });
-    });
-  },
-
-  addRentalBook: ({
+  const [result] = await db.query(sql, [
     book_id,
     renter_id,
     rental_price,
     rental_duration,
     pdf_url,
-  }) => {
-    return new Promise((resolve, reject) => {
-      const sql = `INSERT INTO rentEbooks 
-                     (book_id, renter_id, rental_price, rental_duration, pdf_url, rental_status) 
-                     VALUES (?, ?, ?, ?, ?, 'active')`;
+  ]);
 
-      db.query(
-        sql,
-        [book_id, renter_id, rental_price, rental_duration, pdf_url],
-        (err, result) => {
-          if (err) return reject(err);
-          resolve({ rental_id: result.insertId });
-        }
-      );
-    });
-  },
+  return { rental_id: result.insertId };
 };
 
-module.exports = Book;
+module.exports = {
+  getAllBooks,
+  getBooksByOwnerId,
+  getBookById,
+  addBook,
+  updateBook,
+  deleteBook,
+  addRentalBook,
+};

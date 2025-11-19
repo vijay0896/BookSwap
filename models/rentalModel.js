@@ -1,144 +1,111 @@
 const db = require("../config/dbConfig");
 
 const Rental = {
-  // Add a new rental (E-Book)
-  addRental: ({
-    book_id,
-    renter_id,
-    rental_price,
-    rental_duration,
-    pdf_url,
-  }) => {
-    return new Promise((resolve, reject) => {
-      // Check if the book is already rented
-      const sqlCheck = "SELECT * FROM rentEbooks WHERE book_id = ?";
-      db.query(sqlCheck, [book_id], (err, result) => {
-        if (err) return reject(err);
-        if (result.length > 0)
-          return reject({ error: "This book is already listed for rental" });
+  // Add rental ebook
+  addRental: async ({ book_id, renter_id, rental_price, rental_duration, pdf_url }) => {
 
-        // Insert rental if book is not already rented
-        const sqlInsert = `
-          INSERT INTO rentEbooks (book_id, renter_id, rental_price, rental_duration, pdf_url)
-          VALUES (?, ?, ?, ?, ?)
-        `;
-        db.query(
-          sqlInsert,
-          [book_id, renter_id, rental_price, rental_duration, pdf_url],
-          (err, result) => {
-            if (err) return reject(err);
+    // Check if book already rented
+    const [existing] = await db.query(
+      "SELECT * FROM rentEbooks WHERE book_id = ?",
+      [book_id]
+    );
 
-            // After inserting into rentEbooks, update service_type in books table
-            const sqlUpdate = `
-            UPDATE books 
-            SET service_type = 'rental' 
-            WHERE id = ? AND service_type = 'resale'
-          `;
-            db.query(sqlUpdate, [book_id], (err, updateResult) => {
-              if (err) return reject(err);
+    if (existing.length > 0) {
+      throw { error: "This book is already listed for rental" };
+    }
 
-              resolve(result.insertId);
-            });
-          }
-        );
-      });
-    });
+    // Insert rental row
+    const insertSql = `
+      INSERT INTO rentEbooks (book_id, renter_id, rental_price, rental_duration, pdf_url)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    const [insertResult] = await db.query(insertSql, [
+      book_id,
+      renter_id,
+      rental_price,
+      rental_duration,
+      pdf_url,
+    ]);
+
+    // Update book service_type
+    await db.query(
+      `UPDATE books SET service_type = 'rental' WHERE id = ?`,
+      [book_id]
+    );
+
+    return insertResult.insertId;
   },
 
-  // Get all rental books
-  getAllRentals: () => {
-    return new Promise((resolve, reject) => {
-      const sql = `
-        SELECT rentEbooks.*, books.title,books.cover_image_url,books.genre,books.description,books.author, users.name AS renter_name 
-        FROM rentEbooks 
-        JOIN books ON rentEbooks.book_id = books.id 
-        JOIN users ON rentEbooks.renter_id = users.id
-         WHERE books.service_type = 'rental'
-      `;
-      db.query(sql, (err, results) => {
-        if (err) return reject(err);
-        resolve(results);
-      });
-    });
-  },
-  
-  getAllRentalsByOwner: (ownerId) => {
-    return new Promise((resolve, reject) => {
-      const sql = `
-        SELECT 
-          rentEbooks.*, 
-          books.title, books.cover_image_url, books.genre, books.description, books.author, 
-          users.name AS renter_name 
-        FROM rentEbooks 
-        JOIN books ON rentEbooks.book_id = books.id 
-        JOIN users ON rentEbooks.renter_id = users.id
-        WHERE books.service_type = 'rental' AND books.owner_id = ?
-      `;
-      db.query(sql, [ownerId], (err, results) => {
-        if (err) return reject(err);
-        resolve(results);
-      });
-    });
-  },
-  
-
-  // Get rental by ID
-  getRentalById: (id) => {
-    return new Promise((resolve, reject) => {
-      const sql = `
-        SELECT rentEbooks.*, books.title AS book_title, users.name AS renter_name 
-        FROM rentEbooks 
-        JOIN books ON rentEbooks.book_id = books.id 
-        JOIN users ON rentEbooks.renter_id = users.id
-        WHERE rentEbooks.id = ?
-      `;
-      db.query(sql, [id], (err, result) => {
-        if (err) reject(err);
-        resolve(result[0]);
-      });
-    });
+  // Get all rentals
+  getAllRentals: async () => {
+    const sql = `
+      SELECT rentEbooks.*, books.title, books.cover_image_url, books.genre, books.description, books.author,
+             users.name AS renter_name
+      FROM rentEbooks
+      JOIN books ON rentEbooks.book_id = books.id
+      JOIN users ON rentEbooks.renter_id = users.id
+      WHERE books.service_type = 'rental'
+    `;
+    const [rows] = await db.query(sql);
+    return rows;
   },
 
-  // Update rental details
-  // Update rental details, including the PDF URL
-  updateRental: (id, updates) => {
-    return new Promise((resolve, reject) => {
-      const { rental_price, rental_duration, rental_status, pdf_url } = updates;
-
-      // Ensure rental_status is valid
-      if (rental_status && !["active", "completed"].includes(rental_status)) {
-        return reject({ error: "Invalid rental status" });
-      }
-
-      let sql =
-        "UPDATE rentEbooks SET rental_price = ?, rental_duration = ?, rental_status = ?";
-      let values = [rental_price, rental_duration, rental_status];
-
-      // If a new PDF is provided, update the `pdf_url` field as well
-      if (pdf_url) {
-        sql += ", pdf_url = ?";
-        values.push(pdf_url);
-      }
-
-      sql += " WHERE id = ?";
-      values.push(id);
-
-      db.query(sql, values, (err, result) => {
-        if (err) return reject(err);
-        resolve({ message: "Rental updated successfully" });
-      });
-    });
+  // Get all rentals by owner
+  getAllRentalsByOwner: async (ownerId) => {
+    const sql = `
+      SELECT rentEbooks.*, books.title, books.cover_image_url, books.genre, books.description, books.author,
+             users.name AS renter_name
+      FROM rentEbooks
+      JOIN books ON rentEbooks.book_id = books.id
+      JOIN users ON rentEbooks.renter_id = users.id
+      WHERE books.service_type = 'rental' AND books.owner_id = ?
+    `;
+    const [rows] = await db.query(sql, [ownerId]);
+    return rows;
   },
 
-  // Delete a rental record
-  deleteRental: (id) => {
-    return new Promise((resolve, reject) => {
-      const sql = "DELETE FROM rentEbooks WHERE id = ?";
-      db.query(sql, [id], (err, result) => {
-        if (err) return reject(err);
-        resolve({ message: "Rental deleted successfully" });
-      });
-    });
+  // Get rental by id
+  getRentalById: async (id) => {
+    const sql = `
+      SELECT rentEbooks.*, books.title AS book_title, users.name AS renter_name 
+      FROM rentEbooks 
+      JOIN books ON rentEbooks.book_id = books.id 
+      JOIN users ON rentEbooks.renter_id = users.id
+      WHERE rentEbooks.id = ?
+    `;
+    const [rows] = await db.query(sql, [id]);
+    return rows[0] || null;
+  },
+
+  // Update rental
+  updateRental: async (id, updates) => {
+    const { rental_price, rental_duration, rental_status, pdf_url } = updates;
+
+    if (rental_status && !["active", "completed"].includes(rental_status)) {
+      throw { error: "Invalid rental status" };
+    }
+
+    const sql = `
+      UPDATE rentEbooks 
+      SET rental_price = ?, rental_duration = ?, rental_status = ?, pdf_url = ?
+      WHERE id = ?
+    `;
+
+    await db.query(sql, [
+      rental_price,
+      rental_duration,
+      rental_status,
+      pdf_url,
+      id,
+    ]);
+
+    return { message: "Rental updated successfully" };
+  },
+
+  // Delete rental
+  deleteRental: async (id) => {
+    await db.query("DELETE FROM rentEbooks WHERE id = ?", [id]);
+    return { message: "Rental deleted successfully" };
   },
 };
 
