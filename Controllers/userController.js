@@ -4,6 +4,7 @@
 const db = require("../config/dbConfig");
 const userModel = require("../models/userModel");
 
+
 function formatUserData(userData) {
   // With Cloudinary, URLs are already complete - no need to construct them
   // Cloudinary URLs already start with "https://res.cloudinary.com"
