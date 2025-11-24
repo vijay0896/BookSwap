@@ -1,7 +1,7 @@
 const app = require("./app");
 
 const server = app;
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 8080;
 
 // Home Route
 app.get("/", (req, res) => {
